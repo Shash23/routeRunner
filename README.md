@@ -1,69 +1,69 @@
-# RunSafe — Load-Aware Route Planning
+RolledBadger — Load-Aware Route Recommendation System
 
-RunSafe is a personalized running route recommendation system that generates routes based on how much physical stress a runner’s body can safely handle today.
+Overview
+RolledBadger is a personalized running route recommendation engine that selects routes based on the physical stress a runner’s body can safely handle on a given day. Instead of prescribing distance or pace, the system predicts how hard a run will feel and chooses terrain that produces the correct training stimulus.
 
-Instead of recommending a distance or pace, the system models how hard a run will feel and chooses terrain that produces the correct training stimulus.
+Core Concept
+Two runs of the same distance are not equivalent. Elevation, intensity, and recent training history determine perceived effort and injury risk. The system learns how an individual runner responds to training load and solves the inverse problem:
 
----
+Given a target effort today → choose the route that produces that effort.
 
-## Core Idea
+System Pipeline
 
-Two runs of the same distance are not equally stressful.
-Elevation, fatigue, and recent training history determine injury risk and perceived effort.
+1. Data Ingestion
+   User logs in with Strava.
+   We collect historical activities:
 
-RunSafe learns how a specific runner responds to training and then solves the inverse problem:
+* distance
+* elapsed time
+* pace (derived)
+* date
+* optional heart rate / relative effort
 
-> Given a desired effort level today, what route should the runner take?
+2. Training Load Calculation
+   Each run is converted into a training load value representing physical stress.
 
----
+TrainingLoad = distance × intensity
+Intensity ≈ athlete average pace / run pace
 
-## What the System Does
+3. Fatigue / Readiness Model
+   Recent runs matter more than older runs.
+   We compute a decayed cumulative load:
 
-1. Learns a personal effort model
-   Using historical running data (distance, elevation gain, pace, heart rate, and perceived exertion), the system trains a regression model that predicts how difficult a run will feel.
+Fatigue_today = Σ TrainingLoad_i · exp(-λ · days_since_run)
 
-2. Estimates current fatigue
-   Recent training load (last 7 days of effort) is computed to determine readiness.
+This estimates the runner’s current recovery state.
 
-3. Evaluates possible routes
-   Each candidate route has measurable physical cost (distance + elevation profile).
+4. Personal Effort Model
+   We train a personalized regression model:
 
-4. Recommends the correct route
-   The system selects the route whose predicted effort matches the target training zone (easy, moderate, hard).
+Effort = f(distance, pace, fatigue)
 
----
+The output is predicted perceived exertion (1–10 scale).
+This represents how hard a run will feel for THIS athlete, not an average runner.
 
-## Key Principle
+5. Route Evaluation
+   Each candidate route has measurable cost:
 
-This is not a fitness tracker or mileage planner.
+* distance
+* elevation profile
 
-It is a decision system:
+We predict effort for every route using the trained model.
 
-> Predict effort → match terrain → prevent overload
+6. Decision (Inverse Optimization)
+   We select the route whose predicted effort best matches the desired training zone:
 
-The goal is to keep the runner in an adaptation zone rather than an injury zone.
+argmin_route | PredictedEffort(route) − TargetEffort |
 
----
+Output
 
-## Inputs
-
-* Historical running activities (Strava export)
-* Perceived exertion (RPE)
-* Distance and elevation gain
-* Pace / speed
-* Recent training load
-
-## Outputs
-
-* Recommended running route
+* Recommended route
 * Expected effort level
-* Warning when terrain exceeds safe load
+* Warning if route exceeds safe load
 
----
+Key Idea
+Most fitness apps track what you did.
+RolledBadger decides what you should do today based on recovery state.
 
-## Why This Matters
-
-Current running apps optimize navigation and distance.
-RunSafe optimizes biomechanical stress exposure.
-
-It acts as an adaptive training partner that adjusts routes based on recovery state, not just goals.
+Goal
+Keep runners in the adaptation zone instead of the injury zone by prescribing terrain rather than mileage.
