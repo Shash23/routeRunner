@@ -7,6 +7,8 @@ Uses: pandas, numpy, scikit-learn, datetime, joblib, sys. No deep learning.
 import sys
 from pathlib import Path
 from typing import Tuple, Union
+from typing import Optional
+import time
 
 import numpy as np
 import pandas as pd
@@ -23,22 +25,38 @@ LAMBDA = 0.15
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_GLOBAL_PKL = PROJECT_ROOT / "global_model.pkl"
 
-
+_GLOBAL_MODEL_CACHE: Optional[GradientBoostingRegressor] = None
+_GLOBAL_MODEL_LAST_LOADED: Optional[float] = None
+_GLOBAL_MODEL_CHECK_INTERVAL = 0.1  # seconds For now we may expect it to change often since we are in development
+_GLOBAL_MODEL_LAST_CHECKED: Optional[float] = None
 # ---------------------------------------------------------------------------
 # STEP 1 — Load Global Model
 # ---------------------------------------------------------------------------
 def load_global_model(path: Union[str, Path] = DEFAULT_GLOBAL_PKL):
     """Load global model from pkl (joblib or pickle)."""
+    global _GLOBAL_MODEL_CACHE, _GLOBAL_MODEL_LAST_LOADED, _GLOBAL_MODEL_LAST_CHECKED
+    now = time.time()
+    if _GLOBAL_MODEL_LAST_CHECKED is not None and now - _GLOBAL_MODEL_LAST_CHECKED < _GLOBAL_MODEL_CHECK_INTERVAL:
+        return _GLOBAL_MODEL_CACHE
+    _GLOBAL_MODEL_LAST_CHECKED = now
+
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"Global model not found: {path}")
+
+    last_changed = path.stat().st_mtime
+    if _GLOBAL_MODEL_CACHE is not None and _GLOBAL_MODEL_LAST_LOADED is not None and last_changed == _GLOBAL_MODEL_LAST_LOADED:
+        return _GLOBAL_MODEL_CACHE
+
     try:
-        return joblib.load(path)
+        _GLOBAL_MODEL_CACHE = joblib.load(path)
+        _GLOBAL_MODEL_LAST_LOADED = last_changed
     except Exception:
         import pickle
         with open(path, "rb") as f:
-            return pickle.load(f)
-
+             _GLOBAL_MODEL_CACHE = pickle.load(f)
+             _GLOBAL_MODEL_LAST_LOADED = last_changed
+    return _GLOBAL_MODEL_CACHE
 
 # ---------------------------------------------------------------------------
 # STEP 2 — Process User CSV

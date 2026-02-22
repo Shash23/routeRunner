@@ -68,6 +68,14 @@ body {
   background: var(--accent-hover);
 }
 
+/* Centering for not_connected: must override .state-only.active display */
+.state-only.active[data-state="not_connected"] {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 120px;
+}
+
 .tabs {
   display: flex;
   gap: 0;

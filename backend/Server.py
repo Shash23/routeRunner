@@ -1,5 +1,8 @@
 import asyncio
+import base64
+import json
 import os
+import time
 import sys
 from pathlib import Path
 
@@ -79,9 +82,36 @@ async def root():
     return FileResponse(_TEMPLATES_DIR / "index.html")
 
 
+@app.get("/index.js")
+async def serve_index_js():
+    return FileResponse(_TEMPLATES_DIR / "index.js", media_type="application/javascript")
+
+
+@app.get("/signout")
+async def signout(session_id: str | None = Cookie(None)):
+    """Clear session and redirect to home (sign-in popup will show)."""
+    session_id_manager.delete_session(session_id)
+    response = RedirectResponse(url="/", status_code=302)
+    response.delete_cookie(session_id_manager.SESSION_COOKIE_NAME)
+    response.delete_cookie("athlete")
+    return response
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/signin")
+async def signin(session_id: str | None = Cookie(None)):
+    """
+    Sign-in entry point (use this from the app). If the application needs scope
+    ("read", "activity:read") for the user, redirects to Strava OAuth; otherwise
+    redirects to home.
+    """
+    if session_id_manager.get_athlete_id_from_session(session_id) is not None:
+        return RedirectResponse(url="/", status_code=302)
+    return RedirectResponse(url="/auth/strava", status_code=302)
 
 
 @app.get("/auth/strava")
@@ -121,9 +151,22 @@ async def auth_strava_callback(code: str = Query(..., description="Authorization
         refresh_token=token_response["refresh_token"],
         expires_at=token_response["expires_at"],
     )
-    session_id = session_id_manager.create_session(athlete_id)
+    strava_expires_at = token_response.get("expires_at")
+    session_id = session_id_manager.create_session(athlete_id, expires_at=strava_expires_at)
     response = RedirectResponse(url="/", status_code=302)
-    session_id_manager.set_session_cookie(response, session_id)
+    if strava_expires_at is not None:
+        max_age = max(1, int(strava_expires_at - time.time()))
+    else:
+        max_age = None
+    session_id_manager.set_session_cookie(response, session_id, max_age=max_age)
+
+    # Set name and profile URL in cookies so the frontend can show them without calling
+    client.access_token = token_response["access_token"]
+    athlete = client.get_athlete()
+    name = f"{athlete.firstname} {athlete.lastname}".strip() or "Athlete"
+    profile_url = getattr(athlete, "profile_medium", None) or getattr(athlete, "profile", None) or ""
+    payload = json.dumps({"name": name, "profile_url": profile_url})
+    response.set_cookie("athlete", base64.b64encode(payload.encode()).decode(), max_age=max_age or 600, httponly=False, samesite="lax")
 
     task = asyncio.create_task(athlete_model_manager.train_athlete_model(athlete_id))
 

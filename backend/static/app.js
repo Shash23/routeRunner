@@ -17,8 +17,10 @@ const showTabs = (show) => {
 };
 const setTab = (tabName) => {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
-  const manualPanel = document.querySelector('.manual-inputs');
-  if (manualPanel) manualPanel.classList.toggle('hidden', tabName !== 'manual');
+  document.querySelectorAll('[data-tab]').forEach(el => {
+    if (el.classList.contains('tab')) return;
+    el.classList.toggle('hidden', el.dataset.tab !== tabName);
+  });
 };
 
 // Decode Google polyline (simplified)
