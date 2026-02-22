@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RouteRunner</title>
+</head>
+<body>
+  <p>Connect your Strava account to use RouteRunner with read-only access.</p>
+  <a href="/auth/strava" style="display: inline-block; padding: 0.6rem 1.2rem; background: #fc4c02; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Connect with Strava</a>
+
+  <p style="margin-top: 1.5rem;">Predict stress for a run (default 5 mi @ 8 min/mi):</p>
+  <button type="button" id="predict-stress-btn" style="padding: 0.5rem 1rem; cursor: pointer;">Predict next stress</button>
+  <div id="predict-result" style="margin-top: 0.5rem; min-height: 1.5em;"></div>
+
+  <script>
+    document.getElementById('predict-stress-btn').addEventListener('click', async () => {
+      const resultEl = document.getElementById('predict-result');
+      resultEl.textContent = 'Loading…';
+      try {
+        const res = await fetch('/predict_next_stress?distance=5&pace=8', { credentials: 'include' });
+        const data = await res.json();
+        if (data.error) {
+          resultEl.textContent = 'Error: ' + data.error;
+        } else {
+          resultEl.textContent = 'Predicted stress: ' + data.stress;
+        }
+      } catch (e) {
+        resultEl.textContent = 'Request failed: ' + e.message;
+      }
+    });
+  </script>
+</body>
+</html>
