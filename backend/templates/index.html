@@ -1,33 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>RouteRunner</title>
+  <meta charset="UTF-8">
+  <title>RouteRunner</title>
+  <link rel="stylesheet" href="/index.css">
 </head>
 <body>
-  <p>Connect your Strava account to use RouteRunner with read-only access.</p>
-  <a href="/auth/strava" style="display: inline-block; padding: 0.6rem 1.2rem; background: #fc4c02; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Connect with Strava</a>
+  <div id="signin-overlay" aria-modal="true" aria-labelledby="signin-title">
+    <div id="signin-popup">
+      <p id="signin-title">Sign in with Strava to continue. If you haven’t connected before, you’ll be asked to grant read-only access.</p>
+      <a href="/signin">Sign in with Strava</a>
+    </div>
+  </div>
 
-  <p style="margin-top: 1.5rem;">Predict stress for a run (default 5 mi @ 8 min/mi):</p>
-  <button type="button" id="predict-stress-btn" style="padding: 0.5rem 1rem; cursor: pointer;">Predict next stress</button>
-  <div id="predict-result" style="margin-top: 0.5rem; min-height: 1.5em;"></div>
+  <header class="top-bar">
+    <span class="top-bar-left" id="welcome">Hello.</span>
+    <span class="top-bar-center">RolledBadger</span>
+    <span class="top-bar-right">
+      <a href="/signout" class="signout-btn">Sign out</a>
+      <img id="profile-pic" src="" alt="Profile" class="hidden">
+    </span>
+  </header>
 
-  <script>
-    document.getElementById('predict-stress-btn').addEventListener('click', async () => {
-      const resultEl = document.getElementById('predict-result');
-      resultEl.textContent = 'Loading…';
-      try {
-        const res = await fetch('/predict_next_stress?distance=5&pace=8', { credentials: 'include' });
-        const data = await res.json();
-        if (data.error) {
-          resultEl.textContent = 'Error: ' + data.error;
-        } else {
-          resultEl.textContent = 'Predicted stress: ' + data.stress;
-        }
-      } catch (e) {
-        resultEl.textContent = 'Request failed: ' + e.message;
-      }
-    });
-  </script>
+  <p class="predict-section">Predict stress for a run:</p>
+  <div class="slider-row">
+    <label for="distance-slider">Distance (mi): <span id="distance-value">5</span></label><br>
+    <input type="range" id="distance-slider" min="0.5" max="20" step="0.5" value="5">
+  </div>
+  <div class="slider-row">
+    <label for="pace-slider">Pace (min/mi): <span id="pace-value">8</span></label><br>
+    <input type="range" id="pace-slider" min="5" max="15" step="0.1" value="8">
+  </div>
+  <button type="button" id="predict-stress-btn" class="predict-btn">Predict next stress</button>
+  <div id="predict-result"></div>
+
+  <script src="/index.js"></script>
 </body>
 </html>
