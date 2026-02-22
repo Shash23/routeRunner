@@ -2,3 +2,4 @@
 backend/.local.env
 .venv
 global_model.pkl
+**/__pycache__
