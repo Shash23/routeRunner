@@ -281,6 +281,9 @@ def _get_recommendation_today(ctx):
     prescription = build_prescription(
         distance, pace, fatigue_today, predict_stress, profile
     )
+    # Use iteratively adjusted distance/pace from prescription when present
+    distance = prescription.get("distance_miles", distance)
+    pace = prescription.get("pace", pace)
     full = build_full_recommendation(
         prescription, distance, pace, fatigue_today, profile,
         speed_sensitive=False, fatigue_p65=4.0,
@@ -364,11 +367,21 @@ async def route(
             radius_m=max(1500, int(rec["distance_miles"] * 1609.34 * 0.65)),
         )
     except Exception as e:
-        print(f"Route generation failed: {e}", flush=True)
-        return JSONResponse({"error": "Route generation failed."}, status_code=500)
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
 
+    # No route found (e.g. no OSM data, no start node) — return 200 with error message so client can show it
     if result.get("error"):
-        return JSONResponse({"error": "Route generation failed."}, status_code=500)
+        return {
+            "polyline": result.get("polyline", ""),
+            "distance_miles": result.get("distance", 0),
+            "elevation_gain": result.get("elevation_gain", 0),
+            "predicted_stress": result.get("predicted_stress", 0),
+            "intersections": result.get("intersections", 0),
+            "surface": "mixed",
+            "error": result.get("error"),
+        }
 
     aid = ctx["athlete_id"]
     if aid not in athlete_runtime_state:
@@ -385,10 +398,72 @@ async def route(
     }
 
 
+class ManualRouteBody(BaseModel):
+    lat: float
+    lon: float
+    distance_miles: float
+    hr_zone: Optional[str] = None
+
+
+@app.post("/route/manual")
+async def route_manual(
+    session_id: str | None = Cookie(None),
+    body: ManualRouteBody = Body(...),
+):
+    """Generate a route from manual inputs (distance, hr_zone, location). 401/503/500."""
+    ctx, err = _require_context(session_id)
+    if err == 401:
+        return JSONResponse({"error": "Not connected. Connect with Strava first."}, status_code=401)
+    if err == 503:
+        return JSONResponse({"error": "Model still training. Try again in a minute."}, status_code=503)
+
+    workout_type = (body.hr_zone or "Easy").strip().lower() or "easy"
+    predict_stress = _build_stress_predictor(ctx)
+
+    try:
+        from route_builder.builder import generate_route
+    except Exception as e:
+        print(f"Route builder import failed: {e}", flush=True)
+        return JSONResponse({"error": "Route generation failed."}, status_code=500)
+
+    try:
+        result = generate_route(
+            body.lat,
+            body.lon,
+            workout_type=workout_type,
+            target_stress=0.7,
+            target_distance_mi=body.distance_miles,
+            baseline_pace_min_per_mi=ctx["baseline_pace"],
+            fatigue_today=ctx["fatigue_today"],
+            stress_predictor=predict_stress,
+            radius_m=max(1500, int(body.distance_miles * 1609.34 * 0.65)),
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    if result.get("error"):
+        return {
+            "polyline": result.get("polyline", ""),
+            "distance_miles": result.get("distance", 0),
+            "elevation_gain": result.get("elevation_gain", 0),
+            "error": result.get("error"),
+        }
+
+    return {
+        "polyline": result.get("polyline", ""),
+        "distance_miles": result.get("distance", 0),
+        "elevation_gain": result.get("elevation_gain", 0),
+    }
+
+
 class AdjustBody(BaseModel):
     distance_miles: Optional[float] = None
     duration_minutes: Optional[float] = None
     hr_zone: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 @app.post("/recommendation/adjust")
@@ -406,7 +481,9 @@ async def recommendation_adjust(
     rec = _get_recommendation_today(ctx)
     today_stress = rec["target_stress"]
     original_distance = rec["distance_miles"]
-    lat, lon = _DEFAULT_LAT, _DEFAULT_LON
+    b = body or AdjustBody()
+    lat = b.lat if b.lat is not None else _DEFAULT_LAT
+    lon = b.lon if b.lon is not None else _DEFAULT_LON
 
     athlete_profile = _athlete_profile_from_ctx(ctx)
     predict_stress = _build_stress_predictor(ctx)
@@ -416,7 +493,6 @@ async def recommendation_adjust(
     except Exception:
         return JSONResponse({"error": "Route generation failed."}, status_code=500)
 
-    b = body or AdjustBody()
     try:
         result = manual_edit_process(
             distance_miles=b.distance_miles,

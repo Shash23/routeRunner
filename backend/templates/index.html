@@ -45,6 +45,9 @@
         </div>
 
         <div class="tab-panel manual-inputs hidden" data-tab="manual">
+            <div class="map-wrap" id="map-wrap-manual">
+                <div id="map-manual"></div>
+            </div>
             <div class="manual-input">
                 <label for="input-distance">Distance (miles)</label>
                 <input type="number" id="input-distance" min="0.5" max="30" step="0.1" value="3.5" placeholder="3.5">
@@ -58,6 +61,8 @@
                     <option value="Interval">Interval</option>
                 </select>
             </div>
+            <button type="button" class="btn-find-route" id="btn-find-route">Find route</button>
+            <p class="manual-route-msg hidden" id="manual-route-msg"></p>
             <p class="manual-hint" style="font-size:0.85rem;color:var(--text-muted);margin-top:0;">Change distance or HR
                 zone to update the recommendation and map.</p>
         </div>
