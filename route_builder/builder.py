@@ -284,6 +284,8 @@ REVISIT_NODE_COST_PENALTY = 3.0
 # Near-reversal: _angle_deg returns 0° when reversing, 180° when straight. Penalize when angle <= this.
 REVERSAL_ANGLE_DEG = 30.0
 REVERSAL_TURN_PENALTY = 15.0
+# When expanding, only push the best this many neighbors (by priority) to limit branching.
+EXPAND_MAX_NEIGHBORS = 5
 
 # Bloom filter for "node on path": size and hashes. Path length ~hundreds to low thousands; ~1% false positive.
 BLOOM_M_BITS = 10000
@@ -398,6 +400,7 @@ def _find_bounded_loop(
         prev_state = parent.get((node, d, c, path_bloom))
         prev_node: Optional[Tuple[float, float]] = prev_state[0] if prev_state is not None else None
 
+        candidates: List[Tuple[float, State]] = []
         for v in G.neighbors(node):
             if not G.has_edge(node, v):
                 continue
@@ -426,6 +429,8 @@ def _find_bounded_loop(
             new_state: State = (v, new_d, new_c, new_bloom)
             parent[new_state] = (node, d, c, path_bloom)
             priority = new_c + h(v)
+            candidates.append((priority, new_state))
+        for priority, new_state in sorted(candidates, key=lambda x: x[0])[:EXPAND_MAX_NEIGHBORS]:
             heapq.heappush(heap, (priority, new_state))
 
     return None
