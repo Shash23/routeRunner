@@ -2,4 +2,6 @@
 backend/.local.env
 .venv
 global_model.pkl
+route_map.html
+
 **/__pycache__
