@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from typing import Optional
 
 from fastapi import Body, Cookie, FastAPI, Query
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from stravalib import Client
@@ -102,6 +102,12 @@ async def health():
     return {"status": "ok"}
 
 
+# Chrome DevTools requests this when DevTools is open; return 204 to avoid 404 in logs
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+async def chrome_devtools_well_known():
+    return Response(status_code=204)
+
+
 @app.get("/signin")
 async def signin(session_id: str | None = Cookie(None)):
     """
@@ -109,8 +115,8 @@ async def signin(session_id: str | None = Cookie(None)):
     ("read", "activity:read") for the user, redirects to Strava OAuth; otherwise
     redirects to home.
     """
-    if session_id_manager.get_athlete_id_from_session(session_id) is not None:
-        return RedirectResponse(url="/", status_code=302)
+    #if session_id_manager.get_athlete_id_from_session(session_id) is not None:
+    #    return RedirectResponse(url="/", status_code=302)
     return RedirectResponse(url="/auth/strava", status_code=302)
 
 

@@ -7,16 +7,24 @@ Uses: requests, networkx, numpy, polyline, geopy.
 import math
 import random
 from typing import Any, Callable, Dict, List, Optional, Tuple
+import logging
 
 import networkx as nx
 import numpy as np
 import requests
 from geopy.distance import geodesic
 
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 try:
     import polyline
-except ImportError:
+    logger.debug('polyline import success');
+except ImportError as e:
     polyline = None  # optional encode at end
+    logger.debug('polyline import failed');
+    logger.debug(e);
+    raise e
+
 
 # ---------------------------------------------------------------------------
 # STEP 1 — Runner-aware edge cost and graph build
