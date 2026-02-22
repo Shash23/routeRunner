@@ -8,6 +8,7 @@ const DEFAULT_LON = -89.4012;
 let map = null;
 let mapManual = null;
 let routeLayer = null;
+let manualRouteLayer = null;
 let trainingInterval = null;
 let polylineAnimationId = null;
 /** User location from geolocation API, or null to use default. */
@@ -57,6 +58,71 @@ function initManualMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
   }).addTo(mapManual);
+}
+
+function drawRouteOnManualMap(polylineEncoded, errorMessage) {
+  if (!mapManual) initManualMap();
+  if (!mapManual || !window.L) return;
+  if (manualRouteLayer) {
+    mapManual.removeLayer(manualRouteLayer);
+    manualRouteLayer = null;
+  }
+  const msgEl = $('manual-route-msg');
+  if (errorMessage) {
+    msgEl.textContent = errorMessage;
+    msgEl.classList.remove('hidden');
+    msgEl.classList.add('error');
+    return;
+  }
+  msgEl.classList.add('hidden');
+  const points = decodePolyline(polylineEncoded);
+  if (points.length < 2) return;
+  manualRouteLayer = L.polyline(points, { color: '#c5050c', weight: 4 }).addTo(mapManual);
+  mapManual.fitBounds(L.latLngBounds(points), { padding: [20, 20] });
+  requestAnimationFrame(() => { mapManual.invalidateSize(); });
+}
+
+async function findManualRoute() {
+  const distance = parseFloat($('input-distance').value);
+  const hrZone = $('input-hr').value || 'Easy';
+  const msgEl = $('manual-route-msg');
+  msgEl.classList.add('hidden');
+  if (isNaN(distance) || distance <= 0) {
+    msgEl.textContent = 'Enter a valid distance (miles).';
+    msgEl.classList.remove('hidden');
+    msgEl.classList.add('error');
+    return;
+  }
+  const pos = userPosition || await getLocation();
+  userPosition = pos;
+  msgEl.textContent = 'Finding route…';
+  msgEl.classList.remove('error');
+  msgEl.classList.remove('hidden');
+  const data = await api('/route/manual', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      lat: pos.lat,
+      lon: pos.lon,
+      distance_miles: distance,
+      hr_zone: hrZone || undefined
+    })
+  });
+  if (data._401) { showState('not_connected'); return; }
+  if (data._503) {
+    msgEl.textContent = 'Model still training. Try again in a minute.';
+    msgEl.classList.add('error');
+    return;
+  }
+  if (data._err) {
+    drawRouteOnManualMap('', data.error || 'Route request failed.');
+    return;
+  }
+  if (data.error) {
+    drawRouteOnManualMap(data.polyline || '', data.error);
+    return;
+  }
+  drawRouteOnManualMap(data.polyline || '', null);
 }
 
 // Decode Google polyline (simplified)
@@ -288,6 +354,9 @@ function init() {
   const hrEl = $('input-hr');
   if (distEl) distEl.addEventListener('change', onAdjust);
   if (hrEl) hrEl.addEventListener('change', onAdjust);
+
+  const btnFindRoute = $('btn-find-route');
+  if (btnFindRoute) btnFindRoute.addEventListener('click', findManualRoute);
 
   checkAuth().then(state => {
     if (state === 'not_connected') {

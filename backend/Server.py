@@ -395,6 +395,66 @@ async def route(
     }
 
 
+class ManualRouteBody(BaseModel):
+    lat: float
+    lon: float
+    distance_miles: float
+    hr_zone: Optional[str] = None
+
+
+@app.post("/route/manual")
+async def route_manual(
+    session_id: str | None = Cookie(None),
+    body: ManualRouteBody = Body(...),
+):
+    """Generate a route from manual inputs (distance, hr_zone, location). 401/503/500."""
+    ctx, err = _require_context(session_id)
+    if err == 401:
+        return JSONResponse({"error": "Not connected. Connect with Strava first."}, status_code=401)
+    if err == 503:
+        return JSONResponse({"error": "Model still training. Try again in a minute."}, status_code=503)
+
+    workout_type = (body.hr_zone or "Easy").strip().lower() or "easy"
+    predict_stress = _build_stress_predictor(ctx)
+
+    try:
+        from route_builder.builder import generate_route
+    except Exception as e:
+        print(f"Route builder import failed: {e}", flush=True)
+        return JSONResponse({"error": "Route generation failed."}, status_code=500)
+
+    try:
+        result = generate_route(
+            body.lat,
+            body.lon,
+            workout_type=workout_type,
+            target_stress=0.7,
+            target_distance_mi=body.distance_miles,
+            baseline_pace_min_per_mi=ctx["baseline_pace"],
+            fatigue_today=ctx["fatigue_today"],
+            stress_predictor=predict_stress,
+            radius_m=max(1500, int(body.distance_miles * 1609.34 * 0.65)),
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+    if result.get("error"):
+        return {
+            "polyline": result.get("polyline", ""),
+            "distance_miles": result.get("distance", 0),
+            "elevation_gain": result.get("elevation_gain", 0),
+            "error": result.get("error"),
+        }
+
+    return {
+        "polyline": result.get("polyline", ""),
+        "distance_miles": result.get("distance", 0),
+        "elevation_gain": result.get("elevation_gain", 0),
+    }
+
+
 class AdjustBody(BaseModel):
     distance_miles: Optional[float] = None
     duration_minutes: Optional[float] = None
