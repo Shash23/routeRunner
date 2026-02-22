@@ -1,0 +1,218 @@
+/* RolledBadger — minimal modern */
+:root {
+  --accent: #c5050c;
+  --accent-hover: #9c0409;
+  --text: #1a1a1a;
+  --text-muted: #666;
+  --card-bg: #fff;
+  --shadow: 0 4px 20px rgba(0,0,0,0.08);
+  --radius: 12px;
+  --map-height: 420px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: #f5f5f5;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 2rem 1rem;
+}
+
+.app {
+  width: 100%;
+  max-width: 720px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 2rem;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+.header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.btn-connect {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+.btn-connect:hover {
+  background: var(--accent-hover);
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  margin: 1.5rem 0 1rem;
+  border-bottom: 1px solid #eee;
+}
+.tab {
+  padding: 0.6rem 1.2rem;
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab.active {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+.tab:not(.active):hover {
+  color: var(--text);
+}
+
+.state-only { display: none; }
+.state-only.active { display: block; }
+
+/* Training state */
+.training-status {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-muted);
+}
+.training-status .runs { font-weight: 600; color: var(--text); }
+.training-status.error { color: var(--accent); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.training-status.loading { animation: pulse 1.5s ease-in-out infinite; }
+
+/* Map */
+.map-wrap {
+  width: 100%;
+  height: var(--map-height);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e8e8e8;
+  margin-bottom: 1.25rem;
+}
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-unavailable {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  background: #eee;
+}
+
+/* Decision */
+.decision {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  background: #fafafa;
+  border-radius: 8px;
+}
+.decision h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.decision .workout-type { font-size: 1.15rem; font-weight: 600; color: var(--text); }
+.decision .readiness { font-size: 0.9rem; color: var(--text-muted); }
+
+/* Workout details */
+.workout-details {
+  margin-bottom: 1.25rem;
+}
+.workout-details h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.workout-details ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text);
+}
+.workout-details li { margin: 0.25rem 0; }
+.workout-details .why-bullets { list-style: none; padding-left: 0; }
+.workout-details .why-bullets li::before { content: "• "; color: var(--accent); }
+
+/* Adjustment message */
+.adjust-msg {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f0f7f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.adjust-msg.error { background: #fff0f0; }
+
+/* Explanation */
+.explanation {
+  padding: 1rem;
+  border-left: 4px solid var(--accent);
+  background: #fafafa;
+  border-radius: 0 8px 8px 0;
+}
+.explanation h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.explanation .decision { font-weight: 600; margin-bottom: 0.5rem; }
+.explanation .meta { font-size: 0.85rem; color: var(--text-muted); }
+
+/* Manual input */
+.manual-input {
+  margin-bottom: 1.25rem;
+}
+.manual-input label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+.manual-input input,
+.manual-input select {
+  width: 100%;
+  max-width: 240px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+.manual-input select { cursor: pointer; }
+
+.hidden { display: none !important; }

@@ -1,33 +1,81 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>RouteRunner</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RolledBadger — AI Running Coach</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
-  <p>Connect your Strava account to use RouteRunner with read-only access.</p>
-  <a href="/auth/strava" style="display: inline-block; padding: 0.6rem 1.2rem; background: #fc4c02; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Connect with Strava</a>
+  <div class="app">
+    <header class="header">
+      <h1>RolledBadger</h1>
+      <p>AI Running Coach</p>
+    </header>
 
-  <p style="margin-top: 1.5rem;">Predict stress for a run (default 5 mi @ 8 min/mi):</p>
-  <button type="button" id="predict-stress-btn" style="padding: 0.5rem 1rem; cursor: pointer;">Predict next stress</button>
-  <div id="predict-result" style="margin-top: 0.5rem; min-height: 1.5em;"></div>
+    <!-- STATE 1: Not connected -->
+    <div class="state-only active" data-state="not_connected">
+      <a href="/auth/strava" class="btn-connect" id="btn-connect">Connect with Strava</a>
+    </div>
 
-  <script>
-    document.getElementById('predict-stress-btn').addEventListener('click', async () => {
-      const resultEl = document.getElementById('predict-result');
-      resultEl.textContent = 'Loading…';
-      try {
-        const res = await fetch('/predict_next_stress?distance=5&pace=8', { credentials: 'include' });
-        const data = await res.json();
-        if (data.error) {
-          resultEl.textContent = 'Error: ' + data.error;
-        } else {
-          resultEl.textContent = 'Predicted stress: ' + data.stress;
-        }
-      } catch (e) {
-        resultEl.textContent = 'Request failed: ' + e.message;
-      }
-    });
-  </script>
+    <!-- STATE 2: Training -->
+    <div class="state-only" data-state="training">
+      <div class="training-status" id="training-status">Building your training profile…</div>
+      <p class="training-status">Runs loaded: <span id="training-runs">0</span></p>
+    </div>
+
+    <!-- STATE 3 & 4: Ready -->
+    <div class="state-only" data-state="ready">
+      <div class="tabs-wrap tabs hidden">
+        <button type="button" class="tab active" data-tab="recommended">Recommended</button>
+        <button type="button" class="tab" data-tab="manual">Manual Input</button>
+      </div>
+
+      <div class="tab-panel manual-inputs hidden" data-tab="manual">
+        <div class="manual-input">
+          <label for="input-distance">Distance (miles)</label>
+          <input type="number" id="input-distance" min="0.5" max="30" step="0.1" value="3.5" placeholder="3.5">
+          <label for="input-hr">HR Zone</label>
+          <select id="input-hr">
+            <option value="">—</option>
+            <option value="Recovery">Recovery</option>
+            <option value="Easy">Easy</option>
+            <option value="Steady">Steady</option>
+            <option value="Tempo">Tempo</option>
+            <option value="Interval">Interval</option>
+          </select>
+        </div>
+        <p class="manual-hint" style="font-size:0.85rem;color:var(--text-muted);margin-top:0;">Change distance or HR zone to update the recommendation and map.</p>
+      </div>
+
+      <div class="map-wrap" id="map-wrap"><div id="map"></div></div>
+      <section class="decision">
+        <h3>Today’s decision</h3>
+        <div class="workout-type" id="decision-workout">—</div>
+        <div class="readiness" id="decision-readiness">—</div>
+      </section>
+      <section class="workout-details">
+        <h3>Workout details</h3>
+        <ul>
+          <li>Distance: <span id="detail-distance">—</span></li>
+          <li>Pace range: <span id="detail-pace">—</span></li>
+          <li>HR zone: <span id="detail-hr">—</span></li>
+        </ul>
+        <p style="margin: 0.5rem 0 0.25rem; font-size: 0.9rem; color: var(--text-muted);">Why this run</p>
+        <ul class="why-bullets" id="detail-why"></ul>
+      </section>
+      <div class="adjust-msg hidden" id="adjust-msg-wrap">
+        <p id="adjust-msg"></p>
+      </div>
+      <section class="explanation">
+        <h3>Why the AI chose this workout</h3>
+        <p class="decision" id="explain-decision">—</p>
+        <p class="meta">Fatigue score: <span id="explain-fatigue">—</span> · Personalization strength: <span id="explain-strength">—</span> · <span id="explain-model">—</span></p>
+      </section>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
 </body>
 </html>
