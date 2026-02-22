@@ -5,6 +5,7 @@ const fetchOpts = { credentials: 'include' };
 let map = null;
 let routeLayer = null;
 let trainingInterval = null;
+let polylineAnimationId = null;
 
 const $ = (id) => document.getElementById(id);
 const showState = (name) => {
@@ -50,14 +51,19 @@ function decodePolyline(encoded) {
   return points;
 }
 
-function drawMap(polylineEncoded, unavailable) {
+function drawMap(polylineEncoded, unavailable, unavailableMessage) {
   const wrap = $('map-wrap');
   if (!wrap) return;
+  if (polylineAnimationId != null) {
+    cancelAnimationFrame(polylineAnimationId);
+    polylineAnimationId = null;
+  }
   if (map) map.remove();
   map = null;
   routeLayer = null;
   if (unavailable) {
-    wrap.innerHTML = '<div class="map-unavailable">Route map unavailable (service or network). Your workout and AI explanation are still valid.</div>';
+    const msg = unavailableMessage || 'Route map unavailable (service or network). Your workout and AI explanation are still valid.';
+    wrap.innerHTML = `<div class="map-unavailable">${msg}</div>`;
     return;
   }
   wrap.innerHTML = '<div id="map"></div>';
@@ -70,8 +76,24 @@ function drawMap(polylineEncoded, unavailable) {
   }).addTo(map);
   const points = decodePolyline(polylineEncoded);
   if (points.length >= 2) {
-    routeLayer = L.polyline(points, { color: '#c5050c', weight: 4 }).addTo(map);
-    map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
+    const fullBounds = L.latLngBounds(points);
+    map.fitBounds(fullBounds, { padding: [20, 20] });
+    routeLayer = L.polyline([points[0], points[1]], { color: '#c5050c', weight: 4 }).addTo(map);
+    const durationMs = 5000;
+    const startTime = performance.now();
+    function animate(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      const endIndex = 1 + Math.floor(progress * (points.length - 1));
+      const visiblePoints = points.slice(0, endIndex + 1);
+      routeLayer.setLatLngs(visiblePoints);
+      if (progress < 1) {
+        polylineAnimationId = requestAnimationFrame(animate);
+      } else {
+        polylineAnimationId = null;
+      }
+    }
+    polylineAnimationId = requestAnimationFrame(animate);
   }
 }
 
@@ -143,6 +165,7 @@ function loadRecommendation() {
     if (rec._err || explain._err) return;
     // If route failed (500), still show recommendation + explanation; map will show "unavailable"
     const routeData = (route._err || route._503) ? { polyline: '', _unavailable: true } : route;
+    if (routeData.error) routeData._unavailable = true;
     renderRecommendation(rec, routeData, explain);
   });
 }
@@ -164,7 +187,7 @@ function renderRecommendation(rec, route, explain) {
   if (distInput && rec.distance_miles != null) distInput.value = rec.distance_miles;
   const hrSelect = $('input-hr');
   if (hrSelect && rec.hr_zone) hrSelect.value = rec.hr_zone;
-  drawMap(route.polyline, route._unavailable);
+  drawMap(route.polyline, route._unavailable, route.error);
   renderExplain(explain);
   $('adjust-msg-wrap').classList.add('hidden');
 }

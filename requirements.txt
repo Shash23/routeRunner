@@ -27,3 +27,5 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 tzdata==2025.3
 urllib3==2.6.3
+# Optional: for building route_builder hot path (python setup.py build_ext --inplace)
+Cython>=3.0.0

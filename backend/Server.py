@@ -364,11 +364,21 @@ async def route(
             radius_m=max(1500, int(rec["distance_miles"] * 1609.34 * 0.65)),
         )
     except Exception as e:
-        print(f"Route generation failed: {e}", flush=True)
-        return JSONResponse({"error": "Route generation failed."}, status_code=500)
+        import traceback
+        traceback.print_exc()
+        return JSONResponse({"error": str(e)}, status_code=500)
 
+    # No route found (e.g. no OSM data, no start node) — return 200 with error message so client can show it
     if result.get("error"):
-        return JSONResponse({"error": "Route generation failed."}, status_code=500)
+        return {
+            "polyline": result.get("polyline", ""),
+            "distance_miles": result.get("distance", 0),
+            "elevation_gain": result.get("elevation_gain", 0),
+            "predicted_stress": result.get("predicted_stress", 0),
+            "intersections": result.get("intersections", 0),
+            "surface": "mixed",
+            "error": result.get("error"),
+        }
 
     aid = ctx["athlete_id"]
     if aid not in athlete_runtime_state:
