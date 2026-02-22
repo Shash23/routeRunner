@@ -149,11 +149,12 @@ function loadRecommendation() {
   showState('ready');
   showTabs(true);
   setTab('recommended');
-  Promise.all([
-    api('/recommendation/today'),
-    api('/route?lat=43.0731&lon=-89.4012'),
-    api('/recommendation/explain')
-  ]).then(([rec, route, explain]) => {
+  const recPromise = api('/recommendation/today');
+  const explainPromise = api('/recommendation/explain');
+  const routePromise = api('/route?lat=43.0731&lon=-89.4012');
+
+  // Show workout details as soon as recommendation + explain are ready; don't wait for route
+  Promise.all([recPromise, explainPromise]).then(([rec, explain]) => {
     if (rec._401 || explain._401) {
       showState('not_connected');
       return;
@@ -163,10 +164,12 @@ function loadRecommendation() {
       return;
     }
     if (rec._err || explain._err) return;
-    // If route failed (500), still show recommendation + explanation; map will show "unavailable"
-    const routeData = (route._err || route._503) ? { polyline: '', _unavailable: true } : route;
-    if (routeData.error) routeData._unavailable = true;
-    renderRecommendation(rec, routeData, explain);
+    renderRecommendation(rec, { _loading: true }, explain);
+    routePromise.then(route => {
+      const routeData = (route._err || route._503) ? { polyline: '', _unavailable: true } : route;
+      if (routeData.error) routeData._unavailable = true;
+      drawMap(routeData.polyline, routeData._unavailable, routeData.error);
+    });
   });
 }
 
@@ -187,7 +190,11 @@ function renderRecommendation(rec, route, explain) {
   if (distInput && rec.distance_miles != null) distInput.value = rec.distance_miles;
   const hrSelect = $('input-hr');
   if (hrSelect && rec.hr_zone) hrSelect.value = rec.hr_zone;
-  drawMap(route.polyline, route._unavailable, route.error);
+  if (route._loading) {
+    drawMap('', true, 'Loading route…');
+  } else {
+    drawMap(route.polyline, route._unavailable, route.error);
+  }
   renderExplain(explain);
   $('adjust-msg-wrap').classList.add('hidden');
 }
