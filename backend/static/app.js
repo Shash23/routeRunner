@@ -2,10 +2,16 @@
 const API = ''; // same origin so cookies are sent
 const fetchOpts = { credentials: 'include' };
 
+const DEFAULT_LAT = 43.0731;
+const DEFAULT_LON = -89.4012;
+
 let map = null;
+let mapManual = null;
 let routeLayer = null;
 let trainingInterval = null;
 let polylineAnimationId = null;
+/** User location from geolocation API, or null to use default. */
+let userPosition = null;
 
 const $ = (id) => document.getElementById(id);
 const showState = (name) => {
@@ -22,7 +28,36 @@ const setTab = (tabName) => {
     if (el.classList.contains('tab')) return;
     el.classList.toggle('hidden', el.dataset.tab !== tabName);
   });
+  if (tabName === 'manual') initManualMap();
 };
+
+function getLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve({ lat: DEFAULT_LAT, lon: DEFAULT_LON });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => resolve({ lat: DEFAULT_LAT, lon: DEFAULT_LON }),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  });
+}
+
+function initManualMap() {
+  const wrap = $('map-wrap-manual');
+  if (!wrap || !window.L) return;
+  if (mapManual) {
+    mapManual.invalidateSize();
+    return;
+  }
+  const c = userPosition || { lat: DEFAULT_LAT, lon: DEFAULT_LON };
+  mapManual = L.map('map-manual').setView([c.lat, c.lon], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(mapManual);
+}
 
 // Decode Google polyline (simplified)
 function decodePolyline(encoded) {
@@ -51,7 +86,7 @@ function decodePolyline(encoded) {
   return points;
 }
 
-function drawMap(polylineEncoded, unavailable, unavailableMessage) {
+function drawMap(polylineEncoded, unavailable, unavailableMessage, center) {
   const wrap = $('map-wrap');
   if (!wrap) return;
   if (polylineAnimationId != null) {
@@ -69,8 +104,8 @@ function drawMap(polylineEncoded, unavailable, unavailableMessage) {
   wrap.innerHTML = '<div id="map"></div>';
   const L = window.L;
   if (!L) return;
-  const centerLat = 43.0731, centerLon = -89.4012;
-  map = L.map('map').setView([centerLat, centerLon], 14);
+  const c = center || userPosition || { lat: DEFAULT_LAT, lon: DEFAULT_LON };
+  map = L.map('map').setView([c.lat, c.lon], 14);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
   }).addTo(map);
@@ -149,26 +184,29 @@ function loadRecommendation() {
   showState('ready');
   showTabs(true);
   setTab('recommended');
-  const recPromise = api('/recommendation/today');
-  const explainPromise = api('/recommendation/explain');
-  const routePromise = api('/route?lat=43.0731&lon=-89.4012');
+  getLocation().then((pos) => {
+    userPosition = pos;
+    const recPromise = api('/recommendation/today');
+    const explainPromise = api('/recommendation/explain');
+    const routePromise = api(`/route?lat=${pos.lat}&lon=${pos.lon}`);
 
-  // Show workout details as soon as recommendation + explain are ready; don't wait for route
-  Promise.all([recPromise, explainPromise]).then(([rec, explain]) => {
-    if (rec._401 || explain._401) {
-      showState('not_connected');
-      return;
-    }
-    if (rec._503 || explain._503) {
-      startTrainingPoll();
-      return;
-    }
-    if (rec._err || explain._err) return;
-    renderRecommendation(rec, { _loading: true }, explain);
-    routePromise.then(route => {
-      const routeData = (route._err || route._503) ? { polyline: '', _unavailable: true } : route;
-      if (routeData.error) routeData._unavailable = true;
-      drawMap(routeData.polyline, routeData._unavailable, routeData.error);
+    // Show workout details as soon as recommendation + explain are ready; don't wait for route
+    Promise.all([recPromise, explainPromise]).then(([rec, explain]) => {
+      if (rec._401 || explain._401) {
+        showState('not_connected');
+        return;
+      }
+      if (rec._503 || explain._503) {
+        startTrainingPoll();
+        return;
+      }
+      if (rec._err || explain._err) return;
+      renderRecommendation(rec, { _loading: true }, explain);
+      routePromise.then(route => {
+        const routeData = (route._err || route._503) ? { polyline: '', _unavailable: true } : route;
+        if (routeData.error) routeData._unavailable = true;
+        drawMap(routeData.polyline, routeData._unavailable, routeData.error);
+      });
     });
   });
 }
@@ -213,6 +251,9 @@ function onAdjust() {
   const body = {};
   if (!isNaN(distance) && distance > 0) body.distance_miles = distance;
   if (hrZone) body.hr_zone = hrZone;
+  const pos = userPosition || { lat: DEFAULT_LAT, lon: DEFAULT_LON };
+  body.lat = pos.lat;
+  body.lon = pos.lon;
   $('adjust-msg-wrap').classList.add('hidden');
   api('/recommendation/adjust', {
     method: 'POST',

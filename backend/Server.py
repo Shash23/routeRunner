@@ -399,6 +399,8 @@ class AdjustBody(BaseModel):
     distance_miles: Optional[float] = None
     duration_minutes: Optional[float] = None
     hr_zone: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
 
 
 @app.post("/recommendation/adjust")
@@ -416,7 +418,9 @@ async def recommendation_adjust(
     rec = _get_recommendation_today(ctx)
     today_stress = rec["target_stress"]
     original_distance = rec["distance_miles"]
-    lat, lon = _DEFAULT_LAT, _DEFAULT_LON
+    b = body or AdjustBody()
+    lat = b.lat if b.lat is not None else _DEFAULT_LAT
+    lon = b.lon if b.lon is not None else _DEFAULT_LON
 
     athlete_profile = _athlete_profile_from_ctx(ctx)
     predict_stress = _build_stress_predictor(ctx)
@@ -426,7 +430,6 @@ async def recommendation_adjust(
     except Exception:
         return JSONResponse({"error": "Route generation failed."}, status_code=500)
 
-    b = body or AdjustBody()
     try:
         result = manual_edit_process(
             distance_miles=b.distance_miles,
