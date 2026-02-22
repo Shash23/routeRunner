@@ -1,16 +1,16 @@
 import asyncio
 import os
-import secrets
-import time
 from pathlib import Path
-import datetime
 
 import pandas as pd
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, Query
+from fastapi import Cookie, FastAPI, Query
 from fastapi.responses import FileResponse, RedirectResponse
 from stravalib import Client
+
+import session_id_manager
+import athlete_model_manager
 
 try:
     from backend import strava_token_db
@@ -20,42 +20,11 @@ except ImportError:
 app = FastAPI(title="RouteRunner API")
 
 
-_ACTIVITY_FURTHEST_IN_DAYS = 365
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 _CORE_MODEL_DIR = _BACKEND_DIR.parent / "core-model"
 _TEMPLATES_DIR = _BACKEND_DIR / "templates"
 _ENV_PATH = _BACKEND_DIR / ".local.env"
-
-SESSION_COOKIE_NAME = "session_id"
-SESSION_TIMEOUT_SECONDS = 600  # 10 minutes
-_sessions: dict[str, tuple[int, float]] = {}  # session_id -> (athlete_id, expires_at)
-
-
-def _create_session(athlete_id: int) -> str:
-    session_id = secrets.token_urlsafe(32)
-    expires_at = time.time() + SESSION_TIMEOUT_SECONDS
-    _sessions[session_id] = (athlete_id, expires_at)
-    return session_id
-
-
-def get_athlete_id_from_session(session_id: str | None) -> int | None:
-    """Return athlete_id for a valid session, or None. Removes expired sessions."""
-    if not session_id:
-        return None
-    now = time.time()
-    # Prune expired
-    expired = [sid for sid, (_, exp) in _sessions.items() if exp <= now]
-    for sid in expired:
-        del _sessions[sid]
-    entry = _sessions.get(session_id)
-    if entry is None:
-        return None
-    athlete_id, expires_at = entry
-    if expires_at <= now:
-        del _sessions[session_id]
-        return None
-    return athlete_id
 
 
 def _load_strava_env():
@@ -114,16 +83,11 @@ async def auth_strava_callback(code: str = Query(..., description="Authorization
         refresh_token=token_response["refresh_token"],
         expires_at=token_response["expires_at"],
     )
-    session_id = _create_session(athlete_id)
+    session_id = session_id_manager.create_session(athlete_id)
     response = RedirectResponse(url="/", status_code=302)
-    response.set_cookie(
-        key=SESSION_COOKIE_NAME,
-        value=session_id,
-        max_age=SESSION_TIMEOUT_SECONDS,
-        httponly=True,
-        samesite="lax",
-    )
-    task = asyncio.create_task(create_athlete_profile(athlete_id))
+    session_id_manager.set_session_cookie(response, session_id)
+
+    task = asyncio.create_task(athlete_model_manager.train_athlete_model(athlete_id))
 
     def _log_task_exception(t: asyncio.Task) -> None:
         if t.cancelled():
@@ -136,56 +100,18 @@ async def auth_strava_callback(code: str = Query(..., description="Authorization
 
     return response
 
-
-METERS_PER_MILE = 1609.344
-
-
-def _normalize_activity_type(act_type) -> str:
-    """Get a plain string from stravalib type (may be object with root='Run' or .value)."""
-    if act_type is None:
-        return ""
-    if hasattr(act_type, "root"):
-        return str(getattr(act_type, "root", "") or "")
-    if hasattr(act_type, "value"):
-        return str(getattr(act_type, "value", "") or "")
-    return str(act_type).strip()
-
-
-def _activities_to_dataframe(activities) -> pd.DataFrame:
-    """Build a DataFrame with columns: Activity Type, Distance (mi), Elapsed Time (s), Activity Date (ISO)."""
-    rows = []
-    for activity in activities:
-        act_type_raw = getattr(activity, "type", None) or getattr(activity, "sport_type", None)
-        act_type_str = _normalize_activity_type(act_type_raw)
-        if act_type_str.lower() != "run":
-            continue
-        distance_m = float(activity.distance) if activity.distance is not None else 0.0
-        distance_mi = distance_m / METERS_PER_MILE
-        elapsed = int(activity.elapsed_time) if activity.elapsed_time is not None else 0
-        start = activity.start_date
-        activity_date = start.isoformat() if start else ""
-        rows.append({
-            "Activity Type": "Run",
-            "Distance": round(distance_mi, 4),
-            "Elapsed Time": elapsed,
-            "Activity Date": activity_date,
-        })
-    return pd.DataFrame(rows, columns=["Activity Type", "Distance", "Elapsed Time", "Activity Date"])
-
-
-async def create_athlete_profile(athlete_id: int):
-    """Create an athlete profile from the Strava data."""
-    # Get the strava token from the database
-    token = strava_token_db.get_token(athlete_id)
-    if token is None:
-        print(f"No token found for athlete {athlete_id}", flush=True)
-        return
-
-    # Get the Strava data
-    client = Client()
-    client.access_token = token["access_token"]
-    activities = client.get_activities(after=datetime.now() - datetime.timedelta(days=_ACTIVITY_FURTHEST_IN_DAYS))
-    df = _activities_to_dataframe(activities)
+@app.get("/predict_next_stress")
+async def predict_next_stress(
+    session_id: str | None = Cookie(None),
+    distance: float = Query(5.0, description="Distance in miles"),
+    pace: float = Query(8.0, description="Pace in min/mi"),
+):
+    """Predict the next stress of the run for the athlete (session from cookie or invalid)."""
+    athlete_id = session_id_manager.get_athlete_id_from_session(session_id)
+    if athlete_id is None:
+        return {"error": "Invalid or missing session. Connect with Strava first."}
+    stress = await athlete_model_manager.predict_next_stress(athlete_id, distance, pace)
+    return {"stress": stress}
 
 def main():
     uvicorn.run(app, host="0.0.0.0", port=8000)
