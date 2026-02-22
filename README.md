@@ -65,5 +65,14 @@ Key Idea
 Most fitness apps track what you did.
 RolledBadger decides what you should do today based on recovery state.
 
+Technologies
+* **Language:** Python 3
+* **Core model:** pandas, numpy, scikit-learn (GradientBoostingRegressor), joblib
+* **Route builder:** requests, networkx, numpy, polyline, geopy
+* **Maps & routing:** OpenStreetMap (Overpass API) for road/way data; Leaflet + OSM tiles for map display; Google-style polyline encoding
+* **APIs:** Overpass (OSM), ipapi.co / ip-api.com for IP-based geolocation
+* **Data:** Strava-style CSV; pickle/joblib for saved models (e.g. global_model.pkl)
+* **Backend (optional):** FastAPI, Strava API (stravalib), SQLAlchemy, python-dotenv, uvicorn
+
 Goal
 Keep runners in the adaptation zone instead of the injury zone by prescribing terrain rather than mileage.
