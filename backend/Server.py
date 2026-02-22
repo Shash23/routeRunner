@@ -281,6 +281,9 @@ def _get_recommendation_today(ctx):
     prescription = build_prescription(
         distance, pace, fatigue_today, predict_stress, profile
     )
+    # Use iteratively adjusted distance/pace from prescription when present
+    distance = prescription.get("distance_miles", distance)
+    pace = prescription.get("pace", pace)
     full = build_full_recommendation(
         prescription, distance, pace, fatigue_today, profile,
         speed_sensitive=False, fatigue_p65=4.0,

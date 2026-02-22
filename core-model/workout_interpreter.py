@@ -168,6 +168,67 @@ def get_elevation_target(
 # ---------------------------------------------------------------------------
 # STEP 7 — Build Final Prescription Object
 # ---------------------------------------------------------------------------
+# Iterative tuning: target stress from fatigue (low fatigue → higher target, high fatigue → lower target)
+FATIGUE_REF_HIGH = 5.0  # fatigue at or above this → target near p40 (recovery/easy)
+PRESCRIPTION_MAX_ITERS = 25
+PRESCRIPTION_STRESS_TOL = 0.03
+PRESCRIPTION_STEP_DISTANCE = 0.18
+PRESCRIPTION_STEP_PACE = 0.04  # min/mi; decrease pace = faster = more stress
+
+
+def target_stress_from_fatigue(
+    fatigue_today: float,
+    profile: Dict[str, float],
+    fatigue_ref: float = FATIGUE_REF_HIGH,
+) -> float:
+    """Target stress between p40 (recovery) and p80 (steady). Low fatigue → target p80; high fatigue → target p40."""
+    p40, p80 = profile["p40"], profile["p80"]
+    if fatigue_ref <= 0:
+        fatigue_ref = 1.0
+    # ratio in [0, 1+]: 0 = well recovered → target p80; 1+ = fatigued → target p40
+    ratio = min(1.5, fatigue_today / fatigue_ref)
+    t = 1.0 - ratio  # 1 when fatigue=0, 0 when fatigue>=fatigue_ref
+    t = max(0.0, min(1.0, t))
+    return p40 + (p80 - p40) * t
+
+
+def _adjust_prescription_to_target_stress(
+    distance: float,
+    pace: float,
+    fatigue_today: float,
+    predict_stress: Callable[[float, float, float], float],
+    profile: Dict[str, float],
+    target_stress: float,
+    max_iters: int = PRESCRIPTION_MAX_ITERS,
+    stress_tol: float = PRESCRIPTION_STRESS_TOL,
+    step_d: float = PRESCRIPTION_STEP_DISTANCE,
+    step_p: float = PRESCRIPTION_STEP_PACE,
+) -> Tuple[float, float]:
+    """Iteratively adjust distance and pace so predicted stress approaches target_stress."""
+    median_d = profile["median_distance"]
+    median_p = profile["median_pace"]
+    min_d = max(0.5, median_d * 0.4)
+    max_d = min(20.0, median_d * 2.2)
+    min_p = max(4.0, median_p - 1.5)
+    max_p = median_p + 3.0
+
+    d, p = float(distance), float(pace)
+    for _ in range(max_iters):
+        stress = predict_stress(d, p, fatigue_today)
+        err = stress - target_stress
+        if abs(err) <= stress_tol:
+            break
+        if err < 0:
+            # stress too low (e.g. low fatigue): increase load — more distance, faster pace
+            d = min(max_d, d + step_d)
+            p = max(min_p, p - step_p)
+        else:
+            # stress too high (e.g. high fatigue): decrease load — less distance, slower pace
+            d = max(min_d, d - step_d)
+            p = min(max_p, p + step_p)
+    return d, p
+
+
 def build_prescription(
     distance: float,
     pace: float,
@@ -176,6 +237,10 @@ def build_prescription(
     profile: Dict[str, float],
     hrmax: int = HRMAX_DEFAULT,
 ) -> Dict[str, Any]:
+    target_stress = target_stress_from_fatigue(fatigue_today, profile)
+    distance, pace = _adjust_prescription_to_target_stress(
+        distance, pace, fatigue_today, predict_stress, profile, target_stress
+    )
     stress = predict_stress(distance, pace, fatigue_today)
     zone = classify_training_zone(stress, profile)
     workout_type = get_workout_type(zone, distance, profile)
@@ -191,6 +256,8 @@ def build_prescription(
         "pace_range": pace_range,
         "heart_rate_range": f"{hr_low}–{hr_high} bpm",
         "elevation_gain_target": f"{int(round(elev_low))}–{int(round(elev_high))} ft",
+        "distance_miles": round(distance, 2),
+        "pace": round(pace, 2),
     }
 
 
