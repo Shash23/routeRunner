@@ -1020,6 +1020,7 @@ def generate_route(
             loop = _find_bounded_loop(G, start_node, target_m, low_frac=0.9, high_frac=1.1)
             if loop is not None:
                 loops_with_start.append((loop, start_node))
+                break
         print('loops_with_start');
         print(len(loops_with_start));
         if loops_with_start:
