@@ -21,6 +21,16 @@ from workout_interpreter import (
 )
 
 # ---------------------------------------------------------------------------
+# Columns the model uses
+# ---------------------------------------------------------------------------
+# From CSV (Strava export): Activity Date, Activity Type, Elapsed Time, Distance
+# Derived: distance (= Distance), time_min (= Elapsed Time/60), pace (= time_min/distance)
+# Then: baseline_pace (median pace), intensity (= baseline_pace/pace), raw_load, load,
+#       fatigue_before_run (recency-weighted sum of load)
+# Model features (X): distance, intensity, fatigue_before_run
+# Model target (y): load
+
+# ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -240,9 +250,13 @@ def main():
     print("RolledBadger Load-Response Model")
     print("=" * 50)
 
-    # Step 1
-    df = load_and_clean_activities()
-    print(f"\nStep 1 — Loaded {len(df)} runs after cleaning.")
+    # Step 1 — use first CSV in sample_data if activities.csv missing
+    csv_path = ACTIVITIES_PATH
+    if not csv_path.exists():
+        all_csvs = sorted(SAMPLE_DATA_DIR.glob("*.csv"))
+        csv_path = all_csvs[0] if all_csvs else csv_path
+    df = load_and_clean_activities(csv_path)
+    print(f"\nStep 1 — Loaded {len(df)} runs after cleaning (from {csv_path.name}).")
 
     # Step 2
     df, baseline_pace = add_baseline_and_intensity(df)
