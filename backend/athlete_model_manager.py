@@ -13,11 +13,12 @@ from stravalib import Client
 import strava_token_db
 
 class AthleteModel:
-    def __init__(self, athlete_id: int, model: GradientBoostingRegressor, baseline_pace: float, fatigue_today: float):
+    def __init__(self, athlete_id: int, model: GradientBoostingRegressor, baseline_pace: float, fatigue_today: float, alpha: float):
         self.athlete_id = athlete_id
-        self.model = None
-        self.baseline_pace = None
-        self.fatigue_today = None
+        self.model = model
+        self.baseline_pace = baseline_pace
+        self.fatigue_today = fatigue_today
+        self.alpha = alpha
 
 # Core-model personalization layer (process_user_csv, train_personal_model, load_global_model)
 _CORE_MODEL_DIR = Path(__file__).resolve().parent.parent / "core-model"
@@ -41,6 +42,7 @@ def _save_model(model: AthleteModel) -> None:
     metadata = {
         "baseline_pace": model.baseline_pace,
         "fatigue_today": model.fatigue_today,
+        "alpha": model.alpha,
     }
     with open(_get_model_metadata_path(model.athlete_id), "w") as f:
         json.dump(metadata, f)
@@ -51,7 +53,7 @@ def _load_model(athlete_id: int) -> AthleteModel:
         metadata = json.load(f)
     with open(_get_model_path(athlete_id), "rb") as f:
         model = joblib.load(f)
-    return AthleteModel(athlete_id, model, metadata["baseline_pace"], metadata["fatigue_today"])
+    return AthleteModel(athlete_id, model, metadata["baseline_pace"], metadata["fatigue_today"], metadata["alpha"])
 
 
 
@@ -111,6 +113,8 @@ async def train_athlete_model(athlete_id: int) -> None:
         return
 
     # Personalization layer expects CSV path: write df to temp CSV then process
+    baseline_pace = None
+    fatigue_today = None
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
         tmp_path = Path(f.name)
     try:
@@ -123,7 +127,7 @@ async def train_athlete_model(athlete_id: int) -> None:
     personal_model, run_count = train_personal_model(processed_df)
     alpha = personalization_weight(run_count)
 
-    model = AthleteModel(athlete_id, personal_model, _baseline_pace, _fatigue_today)
+    model = AthleteModel(athlete_id=athlete_id, model=personal_model, baseline_pace=_baseline_pace, fatigue_today=_fatigue_today, alpha=alpha)
     _save_model(model)
 
 
@@ -135,7 +139,7 @@ async def predict_next_stress(athlete_id: int, distance: float, pace: float) -> 
         pace=pace,
         fatigue_today=model.fatigue_today,
         global_model=global_model,
-        personal_model=model.personal_model,
+        personal_model=model.model,
         alpha=model.alpha,
         baseline_pace=model.baseline_pace
     )
